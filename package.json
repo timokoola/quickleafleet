@@ -1,0 +1,15 @@
+{
+  "name": "helsinki-railway-map",
+  "version": "1.0.0",
+  "description": "Leaflet map showing Helsinki railway data",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "client": "python3 -m http.server 8000"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+} 
