@@ -31,6 +31,39 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 // Store the current grid layer group
 let gridLayerGroup = L.layerGroup().addTo(map);
 
+// Store the cache visualization layer group
+let cacheLayerGroup = L.layerGroup();
+
+// Track current view mode
+let isShowingCache = false;
+
+// Create view toggle control
+const viewToggle = L.control({ position: "bottomleft" });
+
+viewToggle.onAdd = function () {
+  this._div = L.DomUtil.create("div", "view-toggle-control");
+  this._div.innerHTML = `
+    <button class="view-toggle-button" title="Toggle between grid and cache view">
+      <span class="view-label">Show Cache</span>
+    </button>
+  `;
+
+  L.DomEvent.disableClickPropagation(this._div);
+
+  this._div.querySelector("button").onclick = () => {
+    isShowingCache = !isShowingCache;
+    updateView();
+
+    // Update button text
+    const label = this._div.querySelector(".view-label");
+    label.textContent = isShowingCache ? "Show Grid" : "Show Cache";
+  };
+
+  return this._div;
+};
+
+viewToggle.addTo(map);
+
 // Create info control
 const info = L.control();
 
@@ -114,10 +147,10 @@ async function fetchAndDisplayGeoJSON() {
     // Get current zoom level
     const zoom = map.getZoom();
 
-    // Clear layers only if zoom level changed
-    if (zoom !== currentZoomLevel) {
+    // Always clear layers on zoom change or if zoom hasn't been set
+    const zoomChanged = zoom !== currentZoomLevel;
+    if (zoomChanged) {
       gridLayerGroup.clearLayers();
-      currentZoomLevel = zoom;
     }
 
     const bounds = map.getBounds();
@@ -130,6 +163,11 @@ async function fetchAndDisplayGeoJSON() {
       `/api/grid?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}&zoom=${zoom}`
     );
     const geojsonData = await response.json();
+
+    // Update current zoom level after successful fetch
+    if (zoomChanged) {
+      currentZoomLevel = zoom;
+    }
 
     // Remove old delay info if it exists
     const oldDelayInfo = document.querySelector(".delay-info-container");
@@ -194,7 +232,11 @@ fetchAndDisplayGeoJSON();
 map.on("movestart", () => info.update(true));
 map.on("zoomstart", () => info.update(true));
 map.on("moveend", () => {
-  fetchAndDisplayGeoJSON();
+  // Clear grid if zoom changed during movement
+  if (map.getZoom() !== currentZoomLevel) {
+    gridLayerGroup.clearLayers();
+  }
+  updateView();
   info.update();
   const center = map.getCenter();
   const state = {
@@ -212,9 +254,9 @@ map.on("moveend", () => {
   window.history.replaceState(state, "", newUrl);
 });
 map.on("zoomend", () => {
-  // Update current zoom level before fetching
-  currentZoomLevel = map.getZoom();
-  fetchAndDisplayGeoJSON();
+  // Clear grid on zoom change
+  gridLayerGroup.clearLayers();
+  updateView();
   info.update();
 });
 
@@ -388,3 +430,83 @@ tileStyle.textContent = `
   }
 `;
 document.head.appendChild(tileStyle);
+
+// Function to convert tile coordinates to bounds
+function getTileBounds(z, x, y) {
+  function tile2lat(y, z) {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  }
+
+  function tile2lng(x, z) {
+    return (x / Math.pow(2, z)) * 360 - 180;
+  }
+
+  const north = tile2lat(y, z);
+  const south = tile2lat(y + 1, z);
+  const west = tile2lng(x, z);
+  const east = tile2lng(x + 1, z);
+
+  return L.latLngBounds([south, west], [north, east]);
+}
+
+// Function to update the current view
+function updateView() {
+  // Clear both layers before switching views
+  gridLayerGroup.clearLayers();
+  cacheLayerGroup.clearLayers();
+
+  if (isShowingCache) {
+    map.addLayer(cacheLayerGroup);
+    updateCacheVisualization();
+  } else {
+    map.addLayer(gridLayerGroup);
+    fetchAndDisplayGeoJSON();
+  }
+}
+
+// Function to visualize cached tiles
+async function updateCacheVisualization() {
+  const bounds = map.getBounds();
+  const zoom = map.getZoom();
+
+  // Get current cache status
+  const response = await fetch(
+    `/api/grid?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}&zoom=${zoom}`
+  );
+  const data = await response.json();
+
+  // Get tile information
+  const { tiles: tileNames } = getTileNames(
+    {
+      north: bounds.getNorth(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      west: bounds.getWest(),
+    },
+    zoom
+  );
+
+  // Create rectangles for cached tiles
+  tileNames.forEach(async (tileName) => {
+    const [z, x, y] = tileName.split("/").map(Number);
+    const key = createTileKey(tileName);
+
+    try {
+      const contentKey = await getCache(key);
+      if (contentKey) {
+        const bounds = getTileBounds(z, x, y);
+        L.rectangle(bounds, {
+          color: "#2980b9", // Darker blue border
+          weight: 2, // Thicker border
+          fillColor: "#3498db", // Lighter blue fill
+          fillOpacity: 0.4, // More opaque
+          dashArray: "5, 5", // Dashed border
+          className: "cache-box", // Add class for hover effects
+        }).addTo(cacheLayerGroup);
+      }
+    } catch (error) {
+      console.error("Error checking cache for tile:", tileName, error);
+    }
+  });
+}

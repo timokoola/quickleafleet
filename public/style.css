@@ -41,4 +41,55 @@ body {
 
 .cache-stats.all-cached {
     color: #27ae60;
+}
+
+.tile-popup-container .leaflet-popup-tip {
+    background: white;
+}
+
+.view-toggle-control {
+    background: white;
+    padding: 5px;
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+}
+
+.view-toggle-button {
+    padding: 6px 10px;
+    border: none;
+    background: white;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    color: #666;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.view-toggle-button:hover {
+    background: #f4f4f4;
+}
+
+/* Cache visualization styles */
+.cache-box {
+    transition: all 0.2s ease;
+}
+
+.cache-box:hover {
+    fillOpacity: 0.6 !important;
+    weight: 3 !important;
+    color: #1a5f89 !important;    /* Darker blue on hover */
+    cursor: pointer;
+    filter: drop-shadow(0 0 4px rgba(41, 128, 185, 0.4));
+}
+
+/* Add pulse animation for newly cached tiles */
+@keyframes pulse {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.4; }
+}
+
+.cache-box.new {
+    animation: pulse 2s infinite;
 } 
