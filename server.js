@@ -27,6 +27,11 @@ const metersToDegreesLng = (meters, lat) =>
 function generateGridLines(bounds, zoomLevel) {
   const features = [];
 
+  // Don't generate grid lines for zoom levels 10 or less
+  if (zoomLevel <= 10) {
+    return features;
+  }
+
   // Determine grid size and style based on zoom level
   let gridSize, lineStyle;
   if (zoomLevel > 17) {
@@ -49,9 +54,8 @@ function generateGridLines(bounds, zoomLevel) {
     gridSize = 500; // 500x500 meters
     lineStyle = {
       color: "yellow",
-      dashArray: "20, 20",
-      weight: 3,
-      opacity: 0.8,
+      weight: 1.5, // Reduced from 3 to 1.5
+      opacity: 0.7, // Slightly reduced opacity
     };
   }
 
