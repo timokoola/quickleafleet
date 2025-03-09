@@ -1,13 +1,21 @@
 # Geographic Grid Visualization
 
-An interactive web application that displays a geographic grid system centered on Helsinki, using Leaflet.js and OpenStreetMap. The grid lines are generated every 100 meters and colored based on their geographic coordinates.
+An interactive web application that displays a dynamic geographic grid system centered on Helsinki. The grid adapts its size and style based on zoom levels, using Leaflet.js and OpenStreetMap.
 
 ## Features
 
+- Dynamic grid system based on OSM zoom levels:
+  * Zoom > 17: 50m grid (red/white striped)
+  * Zoom > 13: 100m grid (blue/white dashed)
+  * Zoom ≤ 13: 500m grid (yellow/black striped)
 - Interactive map centered on Helsinki Railway Station
-- Geographic grid system aligned to 100-meter intervals
-- Dynamic grid generation based on viewport
-- Color patterns based on geographic coordinates
+- Real-time information overlay showing:
+  * Current zoom level
+  * OSM tile coordinates
+  * Viewport dimensions in meters
+  * View distance
+  * Visual feedback during map movement
+- Grid lines aligned to absolute geographic coordinates
 - Popup information for each grid line
 - Responsive design with full-screen map
 
@@ -23,7 +31,8 @@ An interactive web application that displays a geographic grid system centered o
   - Node.js
   - Express.js
   - Static file serving
-  - CORS support for cross-origin requests
+  - CORS support
+  - Haversine distance calculation
 
 ## Project Structure
 
@@ -34,7 +43,8 @@ project-root/
 │   ├── style.css    # Styles for the map
 │   └── script.js    # Frontend JavaScript
 ├── server.js        # Backend API server
-└── package.json     # Project configuration
+├── package.json     # Project configuration
+└── README.md        # Documentation
 ```
 
 ## Installation
@@ -51,15 +61,8 @@ npm install
 ```
 
 3. Start the server:
-
-For production:
 ```bash
 npm start
-```
-
-For development with auto-reload:
-```bash
-npm run dev
 ```
 
 4. Open your browser and navigate to:
@@ -70,11 +73,21 @@ http://localhost:3000
 ## How It Works
 
 1. The frontend initializes a Leaflet map centered on Helsinki Railway Station
-2. When the map viewport changes, the client requests new grid lines from the API
-3. The backend calculates grid lines at 100-meter intervals
-4. Grid lines are snapped to fixed geographic coordinates
-5. Colors are generated based on the absolute position of each line
-6. The frontend clears the old grid and displays the new one
+2. When the map viewport changes (pan/zoom), the client:
+   - Shows "updating" status in the info overlay
+   - Calculates current viewport bounds
+   - Requests new grid from API with current zoom level
+   - Fetches updated information from info API
+   - Updates information overlay
+3. The backend:
+   - Determines grid size based on zoom level
+   - Generates grid lines aligned to absolute coordinates
+   - Calculates viewport dimensions using haversine formula
+   - Returns GeoJSON with styling information
+4. The frontend:
+   - Clears previous grid
+   - Renders new grid with appropriate styling
+   - Updates viewport information
 
 ## API Endpoints
 
@@ -87,8 +100,19 @@ Query Parameters:
 - `south`: Southern boundary latitude
 - `east`: Eastern boundary longitude
 - `west`: Western boundary longitude
+- `zoom`: Current OSM zoom level
 
-Example:
-```
-GET /api/grid?north=60.1819&south=60.1619&east=24.9514&west=24.9314
-```
+### GET /api/info
+
+Returns current map information including viewport dimensions and OSM tile coordinates.
+
+Query Parameters:
+- `lat`: Center latitude
+- `lng`: Center longitude
+- `zoom`: Current zoom level
+- `north`, `south`, `east`, `west`: Viewport boundaries
+
+Response includes:
+- Current zoom level
+- OSM tile coordinates (x, y)
+- Viewport dimensions in meters

@@ -133,6 +133,82 @@ app.get("/api/grid", (req, res) => {
   res.json(geojson);
 });
 
+// Calculate distance between two points in meters
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+// Calculate OSM tile coordinates
+function calculateOSMTile(lat, lng, zoom) {
+  const tileX = Math.floor(((lng + 180) / 360) * Math.pow(2, zoom));
+  const tileY = Math.floor(
+    ((1 -
+      Math.log(
+        Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)
+      ) /
+        Math.PI) /
+      2) *
+      Math.pow(2, zoom)
+  );
+  return { tileX, tileY };
+}
+
+// New endpoint for map information
+app.get("/api/info", (req, res) => {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  const zoom = parseInt(req.query.zoom);
+  const bounds = {
+    north: parseFloat(req.query.north),
+    south: parseFloat(req.query.south),
+    east: parseFloat(req.query.east),
+    west: parseFloat(req.query.west),
+  };
+
+  // Calculate viewport dimensions using haversine formula
+  const viewportWidth = calculateDistance(
+    bounds.north,
+    bounds.west,
+    bounds.north,
+    bounds.east
+  );
+  const viewportHeight = calculateDistance(
+    bounds.north,
+    bounds.west,
+    bounds.south,
+    bounds.west
+  );
+
+  // Calculate OSM tile coordinates
+  const { tileX, tileY } = calculateOSMTile(lat, lng, zoom);
+
+  const info = {
+    zoom,
+    tile: {
+      zoom,
+      x: tileX,
+      y: tileY,
+    },
+    viewport: {
+      width: Math.round(viewportWidth),
+      height: Math.round(viewportHeight),
+    },
+  };
+
+  res.json(info);
+});
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
