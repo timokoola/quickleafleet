@@ -56,9 +56,9 @@ info.update = async function (isMoving = false) {
     this._div.innerHTML = `
       <h4>Map Information</h4>
       <b>Zoom Level:</b> ${data.zoom}<br>
-      <b>OSM Tile:</b> ${data.tile.zoom}/${data.tile.tileX}/${data.tile.tileY}<br>
+      <b>OSM Tiles:</b> ${data.tiles.zoom}/${data.tiles.x.min}-${data.tiles.x.max}/${data.tiles.y.min}-${data.tiles.y.max}<br>
       <b>Viewport:</b> ${data.viewport.width}m × ${data.viewport.height}m<br>
-      <b>View Distance:</b> ${data.viewport.width}m
+      <b>View Distance:</b> ${data.viewport.diagonal}m
     `;
   } catch (error) {
     console.error("Error fetching map information:", error);

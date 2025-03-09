@@ -180,19 +180,26 @@ app.get("/api/info", (req, res) => {
     bounds.west
   );
 
-  // Get current tile coordinates
-  const { tileX, tileY } = calculateOSMTile(lat, lng, zoom);
+  // Calculate diagonal distance
+  const viewDiagonal = Math.sqrt(
+    Math.pow(viewportWidth, 2) + Math.pow(viewportHeight, 2)
+  );
+
+  // Get tile range for the viewport
+  const nw = calculateOSMTile(bounds.north, bounds.west, zoom);
+  const se = calculateOSMTile(bounds.south, bounds.east, zoom);
 
   const info = {
     zoom,
-    tile: {
+    tiles: {
       zoom,
-      tileX,
-      tileY,
+      x: { min: nw.tileX, max: se.tileX },
+      y: { min: nw.tileY, max: se.tileY },
     },
     viewport: {
       width: Math.round(viewportWidth),
       height: Math.round(viewportHeight),
+      diagonal: Math.round(viewDiagonal),
     },
   };
 
