@@ -164,7 +164,7 @@ function calculateOSMTile(lat, lng, zoom) {
   return { tileX, tileY };
 }
 
-// New endpoint for map information
+// Update the /api/info endpoint
 app.get("/api/info", (req, res) => {
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
@@ -190,15 +190,15 @@ app.get("/api/info", (req, res) => {
     bounds.west
   );
 
-  // Calculate OSM tile coordinates
+  // Get current tile coordinates
   const { tileX, tileY } = calculateOSMTile(lat, lng, zoom);
 
   const info = {
     zoom,
     tile: {
       zoom,
-      x: tileX,
-      y: tileY,
+      tileX,
+      tileY,
     },
     viewport: {
       width: Math.round(viewportWidth),
