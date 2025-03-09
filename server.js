@@ -39,7 +39,7 @@ function generateGridLines(bounds, zoomLevel) {
 
   // Determine grid size and style based on zoom level
   let gridSize, lineStyle;
-  if (zoomLevel < 250) {
+  if (zoomLevel > 17) {
     gridSize = 50; // 50x50 meters
     lineStyle = {
       color: "red",
@@ -47,7 +47,7 @@ function generateGridLines(bounds, zoomLevel) {
       weight: 2,
       opacity: 0.7,
     };
-  } else if (zoomLevel < 1500) {
+  } else if (zoomLevel > 13) {
     gridSize = 100; // 100x100 meters
     lineStyle = {
       color: "blue",
