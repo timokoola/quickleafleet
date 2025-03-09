@@ -19,6 +19,12 @@ An interactive web application that displays a dynamic geographic grid system ce
   * Shows all fully visible tiles
   * Displays tile coordinates
   * Updates with map movement
+- State persistence:
+  * Map location saved in URL parameters
+  * Location persists across page refreshes
+  * Shareable URLs with map position
+  * Fallback to localStorage if no URL parameters
+  * Default to Helsinki Railway Station
 
 ## Development Setup
 

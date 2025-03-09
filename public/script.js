@@ -1,14 +1,26 @@
-// Helsinki Railway Station coordinates
+// Helsinki Railway Station coordinates (default location)
 const HELSINKI_STATION = {
   lat: 60.1719,
   lng: 24.9414,
 };
 
-// Initialize the map
-const map = L.map("map").setView(
-  [HELSINKI_STATION.lat, HELSINKI_STATION.lng],
-  15
-);
+// Get stored location or use default
+const params = new URLSearchParams(window.location.search);
+const storedLocation =
+  params.has("lat") && params.has("lng") && params.has("zoom")
+    ? {
+        center: [parseFloat(params.get("lat")), parseFloat(params.get("lng"))],
+        zoom: parseInt(params.get("zoom")),
+      }
+    : localStorage.getItem("mapState")
+    ? JSON.parse(localStorage.getItem("mapState"))
+    : {
+        center: [HELSINKI_STATION.lat, HELSINKI_STATION.lng],
+        zoom: 15,
+      };
+
+// Initialize the map with stored or default location
+const map = L.map("map").setView(storedLocation.center, storedLocation.zoom);
 
 // Add OpenStreetMap tiles
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -140,6 +152,20 @@ map.on("zoomstart", () => info.update(true));
 map.on("moveend", () => {
   fetchAndDisplayGeoJSON();
   info.update();
+  const center = map.getCenter();
+  const state = {
+    center: [center.lat, center.lng],
+    zoom: map.getZoom(),
+  };
+
+  // Update localStorage
+  localStorage.setItem("mapState", JSON.stringify(state));
+
+  // Update URL without reloading the page
+  const newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${
+    center.lng
+  }&zoom=${map.getZoom()}`;
+  window.history.replaceState(state, "", newUrl);
 });
 map.on("zoomend", () => {
   fetchAndDisplayGeoJSON();
