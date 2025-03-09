@@ -5,6 +5,7 @@ import { dirname, join } from "path";
 import { setupDatabase } from "./db/generate-grid.js";
 import pg from "pg";
 import { setTimeout } from "timers/promises";
+import Memcached from "memcached";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,6 +22,14 @@ app.use(express.static(join(__dirname, "public")));
 const pool = new pg.Pool({
   connectionString:
     process.env.POSTGRES_URL || "postgres://postgres:postgres@db:5432/gis",
+});
+
+// Initialize Memcached client
+const memcached = new Memcached(process.env.MEMCACHED_URL || "memcache:11211", {
+  retries: 3,
+  retry: 1000,
+  timeout: 500,
+  reconnect: 1000,
 });
 
 // Add request tracking
@@ -68,11 +77,123 @@ const requestTracker = {
   },
 };
 
+// Create cache key from OSM tile name
+function createTileKey(tileName) {
+  // Validate tile name format (z/x/y)
+  const parts = tileName.split("/");
+  if (parts.length !== 3) {
+    throw new Error(`Invalid tile name format: ${tileName}`);
+  }
+
+  // Add prefix to avoid collisions with other cache keys
+  return `tile:${tileName}`;
+}
+
+// Create cache key for a set of tiles
+
+// Create cache key from JSON content
+function createContentKey(data) {
+  // Stringify with sorted keys for consistency
+  const str = JSON.stringify(data, Object.keys(data).sort());
+
+  // Create a simple hash of the string
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+
+  // Convert to base36 for shorter strings
+  const hashStr = Math.abs(hash).toString(36);
+
+  // Add prefix and timestamp for versioning
+  return `content:${hashStr}`;
+}
+
+// Store JSON in cache with expiration
+function setCache(key, value, expires = 300) {
+  // default 5 minutes
+  return new Promise((resolve, reject) => {
+    memcached.set(key, JSON.stringify(value), expires, (err) => {
+      if (err) {
+        console.error(`Cache set error for key ${key}:`, err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+// Retrieve JSON from cache
+function getCache(key) {
+  return new Promise((resolve, reject) => {
+    memcached.get(key, (err, data) => {
+      if (err) {
+        console.error(`Cache get error for key ${key}:`, err);
+        reject(err);
+      } else {
+        resolve(data ? JSON.parse(data) : null);
+      }
+    });
+  });
+}
+
 // Get grid lines from database
 async function getGridLines(bounds, zoomLevel) {
   // Don't query grid lines for zoom levels 10 or less
   if (zoomLevel <= 10) {
-    return [];
+    return {
+      cached: [],
+      queried: [],
+      cacheStats: {
+        cached: 0,
+        total: 0,
+      },
+    };
+  }
+
+  // Get tile names for this request
+  const { tiles: tileNames } = getTileNames(bounds, zoomLevel);
+
+  // Check if we have cached content keys for these tiles
+  const cachedContentKeys = await Promise.all(
+    tileNames.map((tile) => getCache(createTileKey(tile)))
+  );
+
+  // Track which tiles have cached content
+  const cachedTiles = new Map();
+  const uncachedTiles = new Set();
+
+  tileNames.forEach((tile, index) => {
+    if (cachedContentKeys[index]) {
+      cachedTiles.set(tile, cachedContentKeys[index]);
+    } else {
+      uncachedTiles.add(tile);
+    }
+  });
+
+  // If we have content keys, try to get content from cache
+  const uniqueContentKeys = [...new Set(cachedContentKeys.filter(Boolean))];
+  const cachedContents =
+    uniqueContentKeys.length > 0
+      ? await Promise.all(uniqueContentKeys.map((key) => getCache(key)))
+      : [];
+
+  // Collect all cached features
+  const cachedFeatures = cachedContents.filter(Boolean).flat();
+
+  // If everything is cached, return early
+  if (uncachedTiles.size === 0) {
+    return {
+      cached: cachedFeatures,
+      queried: [],
+      cacheStats: {
+        cached: cachedTiles.size,
+        total: tileNames.length,
+      },
+    };
   }
 
   // Determine grid type based on zoom level
@@ -84,6 +205,34 @@ async function getGridLines(bounds, zoomLevel) {
   } else {
     gridType = "500m";
   }
+
+  // Calculate bounding box for uncached tiles
+  const uncachedBounds = {
+    north: -90,
+    south: 90,
+    east: -180,
+    west: 180,
+  };
+
+  // Function to convert tile coordinates to lat/lng
+  function tile2LatLng(z, x, y) {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    return {
+      lat: (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))),
+      lng: (x / Math.pow(2, z)) * 360 - 180,
+    };
+  }
+
+  // Calculate bounds for uncached area
+  Array.from(uncachedTiles).forEach((tile) => {
+    const [z, x, y] = tile.split("/").map(Number);
+    const nw = tile2LatLng(z, x, y);
+    const se = tile2LatLng(z, x + 1, y + 1);
+    uncachedBounds.north = Math.max(uncachedBounds.north, nw.lat);
+    uncachedBounds.south = Math.min(uncachedBounds.south, se.lat);
+    uncachedBounds.east = Math.max(uncachedBounds.east, se.lng);
+    uncachedBounds.west = Math.min(uncachedBounds.west, nw.lng);
+  });
 
   // Query database for grid lines
   const result = await pool.query(
@@ -99,11 +248,17 @@ async function getGridLines(bounds, zoomLevel) {
       ST_MakeEnvelope($2, $3, $4, $5, 4326)
     )
   `,
-    [gridType, bounds.west, bounds.south, bounds.east, bounds.north]
+    [
+      gridType,
+      uncachedBounds.west,
+      uncachedBounds.south,
+      uncachedBounds.east,
+      uncachedBounds.north,
+    ]
   );
 
-  // Convert to GeoJSON features
-  return result.rows.map((row) => ({
+  // Convert query results to GeoJSON features
+  const features = result.rows.map((row) => ({
     type: "Feature",
     properties: {
       name: row.name,
@@ -119,6 +274,26 @@ async function getGridLines(bounds, zoomLevel) {
     },
     geometry: row.geometry,
   }));
+
+  // Create content key and store in cache
+  const contentKey = createContentKey(features);
+  await setCache(contentKey, features);
+
+  // Store content key in tile caches
+  await Promise.all(
+    Array.from(uncachedTiles).map((tile) =>
+      setCache(createTileKey(tile), contentKey, 3600)
+    )
+  );
+
+  return {
+    cached: cachedFeatures,
+    queried: features,
+    cacheStats: {
+      cached: cachedTiles.size,
+      total: tileNames.length,
+    },
+  };
 }
 
 app.get("/api/grid", async (req, res) => {
@@ -129,24 +304,46 @@ app.get("/api/grid", async (req, res) => {
     west: parseFloat(req.query.west) || 24.9314,
   };
 
-  const zoomLevel = parseFloat(req.query.zoom) || 1000;
+  const zoomLevel = parseFloat(req.query.zoom) || 15;
 
   try {
-    // Track request and apply delay if needed
-    const { delay, activeCount, requestId } =
-      await requestTracker.trackRequest();
+    // Start request tracking
+    let delay = 0;
+    let activeCount = 0;
+    let requestId;
 
-    const features = await getGridLines(bounds, zoomLevel);
+    // Get grid data first to check if everything is cached
+    const { cached, queried, cacheStats } = await getGridLines(
+      bounds,
+      zoomLevel
+    );
+
+    // Only apply delay if we had to query the database
+    if (queried.length > 0) {
+      // Track request and apply delay if needed
+      ({ delay, activeCount, requestId } = await requestTracker.trackRequest());
+    }
 
     // Complete request tracking
-    requestTracker.completeRequest(requestId);
+    if (requestId) {
+      requestTracker.completeRequest(requestId);
+    }
 
     res.json({
       type: "FeatureCollection",
-      features,
+      features: [...cached, ...queried],
       metadata: {
         currentDelay: delay,
         activeRequests: activeCount,
+        cacheInfo: {
+          cached: cached.length,
+          queried: queried.length,
+          zoomLevel: zoomLevel,
+          tilesInZoom: {
+            cached: cacheStats.cached,
+            total: cacheStats.total,
+          },
+        },
       },
     });
   } catch (error) {
@@ -194,10 +391,45 @@ function calculateOSMTile(lat, lng, zoom) {
   return { tileX, tileY };
 }
 
+// Get all OSM tile names within bounds at zoom level
+function getTileNames(bounds, zoomLevel) {
+  // Get tile coordinates for bounds corners
+  const nw = calculateOSMTile(bounds.north, bounds.west, zoomLevel);
+  const se = calculateOSMTile(bounds.south, bounds.east, zoomLevel);
+
+  // Create array to store tile names
+  const tileNames = [];
+
+  // Iterate over tile range
+  for (let y = nw.tileY; y <= se.tileY; y++) {
+    for (let x = nw.tileX; x <= se.tileX; x++) {
+      tileNames.push(`${zoomLevel}/${x}/${y}`);
+    }
+  }
+
+  // Get cache stats for this zoom level
+  const zoomStats = {
+    total: tileNames.length,
+    zoom: zoomLevel,
+    bounds: {
+      x: { min: nw.tileX, max: se.tileX },
+      y: { min: nw.tileY, max: se.tileY },
+    },
+  };
+
+  return {
+    tiles: tileNames,
+    bounds: {
+      x: { min: nw.tileX, max: se.tileX },
+      y: { min: nw.tileY, max: se.tileY },
+    },
+    stats: zoomStats,
+    count: tileNames.length,
+  };
+}
+
 // Update the /api/info endpoint
 app.get("/api/info", (req, res) => {
-  const lat = parseFloat(req.query.lat);
-  const lng = parseFloat(req.query.lng);
   const zoom = parseInt(req.query.zoom);
   const bounds = {
     north: parseFloat(req.query.north),

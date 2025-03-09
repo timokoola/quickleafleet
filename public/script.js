@@ -105,14 +105,22 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Keep track of current zoom level
+let currentZoomLevel = map.getZoom();
+
 // Function to fetch and display GeoJSON data
 async function fetchAndDisplayGeoJSON() {
   try {
-    // Clear all layers in the group
-    gridLayerGroup.clearLayers();
+    // Get current zoom level
+    const zoom = map.getZoom();
+
+    // Clear layers only if zoom level changed
+    if (zoom !== currentZoomLevel) {
+      gridLayerGroup.clearLayers();
+      currentZoomLevel = zoom;
+    }
 
     const bounds = map.getBounds();
-    const zoom = map.getZoom();
 
     // Update info overlay
     info.update();
@@ -141,6 +149,21 @@ async function fetchAndDisplayGeoJSON() {
           geojsonData.metadata.currentDelay
         }</span>ms
         (${geojsonData.metadata.activeRequests} active)
+        <br>
+        Cache: ${geojsonData.metadata.cacheInfo.cached} cached, 
+        ${geojsonData.metadata.cacheInfo.queried} queried
+        <br>
+        Zoom ${geojsonData.metadata.cacheInfo.zoomLevel} tiles: 
+        <span class="cache-stats ${
+          geojsonData.metadata.cacheInfo.tilesInZoom.cached ===
+          geojsonData.metadata.cacheInfo.tilesInZoom.total
+            ? "all-cached"
+            : ""
+        }">
+          ${geojsonData.metadata.cacheInfo.tilesInZoom.cached}/${
+      geojsonData.metadata.cacheInfo.tilesInZoom.total
+    }
+        </span> in cache
       </p>
     `;
     document.querySelector(".info-overlay").appendChild(delayInfo);
@@ -189,6 +212,8 @@ map.on("moveend", () => {
   window.history.replaceState(state, "", newUrl);
 });
 map.on("zoomend", () => {
+  // Update current zoom level before fetching
+  currentZoomLevel = map.getZoom();
   fetchAndDisplayGeoJSON();
   info.update();
 });

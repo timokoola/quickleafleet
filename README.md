@@ -17,16 +17,24 @@ An interactive web application that displays a dynamic geographic grid system ce
   * Maximum delay: 10 seconds
   * Resets immediately when requests complete
   * Shows current delay and active request count
+- Advanced caching system:
+  * Two-level tile and content caching
+  * Per-zoom level tile tracking
+  * Content-based deduplication
+  * Cache statistics in overlay
+  * Visual feedback for cache hits
 - Interactive map centered on Helsinki Railway Station
 - Real-time information overlay showing:
   * Current zoom level
   * OSM tile range in view
   * Viewport dimensions in meters
   * View diagonal distance
+  * Cache status and coverage
 - Visual tile preview functionality:
   * Shows all fully visible tiles
   * Displays tile coordinates
-  * Updates with map movement
+  * Updates smoothly during panning
+  * Maintains grid during viewport changes
 - State persistence:
   * Map location saved in URL parameters
   * Location persists across page refreshes
