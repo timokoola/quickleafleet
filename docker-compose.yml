@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    volumes:
+      - ./public:/app/public
+      - ./node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - BACKEND_URL=http://backend:3001
+    depends_on:
+      - backend
+    networks:
+      - frontend-net
+      - backend-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    volumes:
+      - ./server.js:/app/server.js
+      - ./node_modules:/app/node_modules
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - MEMCACHED_URL=memcache:11211
+      - POSTGRES_URL=postgres://postgres:postgres@db:5432/gis
+    depends_on:
+      - memcache
+      - db
+    networks:
+      - backend-net
+      - db-net
+
+  memcache:
+    image: memcached:1.6-alpine
+    ports:
+      - "11211:11211"
+    networks:
+      - backend-net
+
+  db:
+    image: postgis/postgis:15-3.3
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gis
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - db-net
+
+networks:
+  frontend-net:
+  backend-net:
+  db-net:
+
+volumes:
+  postgres_data: 
