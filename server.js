@@ -31,6 +31,20 @@ const requestTracker = {
   maxDelay: 50000, // Maximum delay in ms
   windowSize: 2000, // Time window in ms to consider requests "concurrent"
 
+  getCurrentDelay() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    if (timeSinceLastRequest >= this.windowSize || this.activeRequests === 0) {
+      return 0;
+    }
+
+    return Math.min(
+      this.baseDelay * Math.pow(2, this.activeRequests - 1),
+      this.maxDelay
+    );
+  },
+
   async trackRequest() {
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
@@ -139,6 +153,10 @@ app.get("/api/grid", async (req, res) => {
     res.json({
       type: "FeatureCollection",
       features,
+      metadata: {
+        currentDelay: requestTracker.getCurrentDelay(),
+        activeRequests: requestTracker.activeRequests,
+      },
     });
   } catch (error) {
     // Ensure request is marked complete even on error

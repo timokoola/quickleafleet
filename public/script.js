@@ -50,27 +50,41 @@ info.update = async function (isMoving = false) {
     return;
   }
 
-  this._div.classList.remove("updating");
   try {
     const bounds = map.getBounds();
     const center = map.getCenter();
     const zoom = map.getZoom();
 
-    const response = await fetch(
-      `/api/info?` +
-        `lat=${center.lat}&lng=${center.lng}&` +
-        `zoom=${zoom}&` +
-        `north=${bounds.getNorth()}&south=${bounds.getSouth()}&` +
-        `east=${bounds.getEast()}&west=${bounds.getWest()}`
+    // Fetch grid data
+    const gridResponse = await fetch(
+      `/api/grid?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}&zoom=${zoom}`
     );
-    const data = await response.json();
+    const gridData = await gridResponse.json();
 
+    // Fetch info data
+    const infoResponse = await fetch(
+      `/api/info?lat=${center.lat}&lng=${
+        center.lng
+      }&zoom=${zoom}&north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}`
+    );
+    const info = await infoResponse.json();
+
+    this._div.classList.remove("updating");
     this._div.innerHTML = `
       <h4>Map Information</h4>
-      <b>Zoom Level:</b> ${data.zoom}<br>
-      <b>OSM Tiles:</b> ${data.tiles.zoom}/${data.tiles.x.min}-${data.tiles.x.max}/${data.tiles.y.min}-${data.tiles.y.max}<br>
-      <b>Viewport:</b> ${data.viewport.width}m × ${data.viewport.height}m<br>
-      <b>View Distance:</b> ${data.viewport.diagonal}m
+      <p>Zoom level: ${info.zoom}</p>
+      <p>Tiles: x(${info.tiles.x.min}-${info.tiles.x.max}), y(${
+      info.tiles.y.min
+    }-${info.tiles.y.max})</p>
+      <p>Viewport: ${info.viewport.width}m × ${info.viewport.height}m</p>
+      <p>Diagonal: ${info.viewport.diagonal}m</p>
+      <p>Load simulation:</p>
+      <p class="delay-info ${
+        gridData.metadata.currentDelay > 0 ? "active" : ""
+      }">
+        Delay: ${gridData.metadata.currentDelay}ms
+        (${gridData.metadata.activeRequests} active)
+      </p>
     `;
   } catch (error) {
     console.error("Error fetching map information:", error);
