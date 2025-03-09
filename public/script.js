@@ -55,12 +55,6 @@ info.update = async function (isMoving = false) {
     const center = map.getCenter();
     const zoom = map.getZoom();
 
-    // Fetch grid data
-    const gridResponse = await fetch(
-      `/api/grid?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}&zoom=${zoom}`
-    );
-    const gridData = await gridResponse.json();
-
     // Fetch info data
     const infoResponse = await fetch(
       `/api/info?lat=${center.lat}&lng=${
@@ -73,18 +67,9 @@ info.update = async function (isMoving = false) {
     this._div.innerHTML = `
       <h4>Map Information</h4>
       <p>Zoom level: ${info.zoom}</p>
-      <p>Tiles: x(${info.tiles.x.min}-${info.tiles.x.max}), y(${
-      info.tiles.y.min
-    }-${info.tiles.y.max})</p>
+      <p>Tiles: x(${info.tiles.x.min}-${info.tiles.x.max}), y(${info.tiles.y.min}-${info.tiles.y.max})</p>
       <p>Viewport: ${info.viewport.width}m × ${info.viewport.height}m</p>
       <p>Diagonal: ${info.viewport.diagonal}m</p>
-      <p>Load simulation:</p>
-      <p class="delay-info ${
-        gridData.metadata.currentDelay > 0 ? "active" : ""
-      }">
-        Delay: ${gridData.metadata.currentDelay}ms
-        (${gridData.metadata.activeRequests} active)
-      </p>
     `;
   } catch (error) {
     console.error("Error fetching map information:", error);
@@ -127,7 +112,7 @@ async function fetchAndDisplayGeoJSON() {
     gridLayerGroup.clearLayers();
 
     const bounds = map.getBounds();
-    const zoom = map.getZoom(); // Get the current zoom level directly
+    const zoom = map.getZoom();
 
     // Update info overlay
     info.update();
@@ -137,6 +122,28 @@ async function fetchAndDisplayGeoJSON() {
       `/api/grid?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}&zoom=${zoom}`
     );
     const geojsonData = await response.json();
+
+    // Remove old delay info if it exists
+    const oldDelayInfo = document.querySelector(".delay-info-container");
+    if (oldDelayInfo) {
+      oldDelayInfo.remove();
+    }
+
+    // Create new delay info
+    const delayInfo = document.createElement("div");
+    delayInfo.className = "delay-info-container";
+    delayInfo.innerHTML = `
+      <p>Load simulation:</p>
+      <p class="delay-info ${
+        geojsonData.metadata.currentDelay > 0 ? "active" : ""
+      }">
+        Delay: <span class="delay-value">${
+          geojsonData.metadata.currentDelay
+        }</span>ms
+        (${geojsonData.metadata.activeRequests} active)
+      </p>
+    `;
+    document.querySelector(".info-overlay").appendChild(delayInfo);
 
     // Add GeoJSON to the layer group
     L.geoJSON(geojsonData, {

@@ -28,53 +28,43 @@ const requestTracker = {
   activeRequests: 0,
   lastRequestTime: 0,
   baseDelay: 100, // Base delay in ms
-  maxDelay: 50000, // Maximum delay in ms
-  windowSize: 2000, // Time window in ms to consider requests "concurrent"
+  maxDelay: 10000, // Maximum delay in ms
+  windowSize: 500, // Time window in ms to consider requests "concurrent"
+  activeRequests: new Set(), // Track active request IDs
+  lastRequestId: 0,
 
   getCurrentDelay() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-
-    if (timeSinceLastRequest >= this.windowSize || this.activeRequests === 0) {
+    const activeCount = this.activeRequests.size;
+    if (activeCount === 0) {
       return 0;
     }
 
-    return Math.min(
-      this.baseDelay * Math.pow(2, this.activeRequests - 1),
-      this.maxDelay
-    );
+    return Math.min(this.baseDelay * Math.pow(2, activeCount), this.maxDelay);
   },
 
   async trackRequest() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-
-    // Update state
-    this.activeRequests++;
-    this.lastRequestTime = now;
+    const requestId = ++this.lastRequestId;
+    this.activeRequests.add(requestId);
 
     // Calculate delay based on concurrent requests
-    let delay = 0;
-    if (timeSinceLastRequest < this.windowSize) {
-      // Exponential backoff: baseDelay * 2^(activeRequests-1)
-      delay = Math.min(
-        this.baseDelay * Math.pow(2, this.activeRequests - 1),
-        this.maxDelay
-      );
-    }
+    const activeCount = this.activeRequests.size;
+    const delay = Math.min(
+      this.baseDelay * Math.pow(2, activeCount - 1),
+      this.maxDelay
+    );
 
     // Apply delay if needed
     if (delay > 0) {
+      console.log(
+        `Delaying request ${requestId} by ${delay}ms (active: ${activeCount})`
+      );
       await setTimeout(delay);
     }
+    return { delay, activeCount, requestId };
   },
 
-  completeRequest() {
-    this.activeRequests = Math.max(0, this.activeRequests - 1);
-    // Reset if no active requests
-    if (this.activeRequests === 0) {
-      this.lastRequestTime = 0;
-    }
+  completeRequest(requestId) {
+    this.activeRequests.delete(requestId);
   },
 };
 
@@ -143,24 +133,27 @@ app.get("/api/grid", async (req, res) => {
 
   try {
     // Track request and apply delay if needed
-    await requestTracker.trackRequest();
+    const { delay, activeCount, requestId } =
+      await requestTracker.trackRequest();
 
     const features = await getGridLines(bounds, zoomLevel);
 
     // Complete request tracking
-    requestTracker.completeRequest();
+    requestTracker.completeRequest(requestId);
 
     res.json({
       type: "FeatureCollection",
       features,
       metadata: {
-        currentDelay: requestTracker.getCurrentDelay(),
-        activeRequests: requestTracker.activeRequests,
+        currentDelay: delay,
+        activeRequests: activeCount,
       },
     });
   } catch (error) {
     // Ensure request is marked complete even on error
-    requestTracker.completeRequest();
+    if (requestId) {
+      requestTracker.completeRequest(requestId);
+    }
 
     console.error("Error fetching grid lines:", error);
     res.status(500).json({

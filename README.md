@@ -12,9 +12,11 @@ An interactive web application that displays a dynamic geographic grid system ce
 - Request throttling simulation:
   * Tracks concurrent grid requests
   * Adds exponential backoff delays
-  * Simulates database load
-  * Resets after request window clears
-  * Configurable delay parameters
+  * Accurately tracks active requests
+  * Base delay: 100ms with exponential growth
+  * Maximum delay: 10 seconds
+  * Resets immediately when requests complete
+  * Shows current delay and active request count
 - Interactive map centered on Helsinki Railway Station
 - Real-time information overlay showing:
   * Current zoom level

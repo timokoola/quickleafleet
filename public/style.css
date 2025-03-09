@@ -24,4 +24,11 @@ body {
 .delay-info.active {
     color: #d63031;
     font-weight: bold;
+}
+
+.delay-value {
+    font-family: monospace;
+    font-size: 1.1em;
+    min-width: 5ch;
+    display: inline-block;
 } 
