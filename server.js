@@ -3,6 +3,7 @@ import cors from "cors";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { setupDatabase } from "./db/generate-grid.js";
+import pg from "pg";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,102 +16,66 @@ app.use(cors());
 // Serve static files from the public directory
 app.use(express.static(join(__dirname, "public")));
 
-// Convert meters to degrees (approximate)
-const metersToDegreesLat = (meters) => meters / 111111;
-const metersToDegreesLng = (meters, lat) =>
-  meters / (111111 * Math.cos((lat * Math.PI) / 180));
+// Create database pool
+const pool = new pg.Pool({
+  connectionString:
+    process.env.POSTGRES_URL || "postgres://postgres:postgres@db:5432/gis",
+});
 
-// Generate a color based on coordinates
-
-// Find the nearest grid line start point
-
-// Generate grid lines for the given bounds
-function generateGridLines(bounds, zoomLevel) {
-  const features = [];
-
-  // Don't generate grid lines for zoom levels 10 or less
+// Get grid lines from database
+async function getGridLines(bounds, zoomLevel) {
+  // Don't query grid lines for zoom levels 10 or less
   if (zoomLevel <= 10) {
-    return features;
+    return [];
   }
 
-  // Determine grid size and style based on zoom level
-  let gridSize, lineStyle;
+  // Determine grid type based on zoom level
+  let gridType;
   if (zoomLevel > 17) {
-    gridSize = 50; // 50x50 meters
-    lineStyle = {
-      color: "red",
-      dashArray: "10, 10",
-      weight: 2,
-      opacity: 0.7,
-    };
+    gridType = "50m";
   } else if (zoomLevel > 13) {
-    gridSize = 100; // 100x100 meters
-    lineStyle = {
-      color: "blue",
-      dashArray: "15, 10",
+    gridType = "100m";
+  } else {
+    gridType = "500m";
+  }
+
+  // Query database for grid lines
+  const result = await pool.query(
+    `
+    SELECT 
+      name,
+      color,
+      ST_AsGeoJSON(geom)::json as geometry
+    FROM geolines 
+    WHERE line_type = $1
+    AND ST_Intersects(
+      geom,
+      ST_MakeEnvelope($2, $3, $4, $5, 4326)
+    )
+  `,
+    [gridType, bounds.west, bounds.south, bounds.east, bounds.north]
+  );
+
+  // Convert to GeoJSON features
+  return result.rows.map((row) => ({
+    type: "Feature",
+    properties: {
+      name: row.name,
+      color: row.color,
       weight: 2,
       opacity: 0.7,
-    };
-  } else {
-    gridSize = 500; // 500x500 meters
-    lineStyle = {
-      color: "yellow",
-      weight: 1.5, // Reduced from 3 to 1.5
-      opacity: 0.7, // Slightly reduced opacity
-    };
-  }
-
-  // Convert grid size to degrees at the center latitude
-  const centerLat = (bounds.north + bounds.south) / 2;
-  const gridSizeLat = metersToDegreesLat(gridSize);
-  const gridSizeLng = metersToDegreesLng(gridSize, centerLat);
-
-  // Calculate grid starting points based on fixed origin (0,0)
-  const startLat = Math.floor(bounds.south / gridSizeLat) * gridSizeLat;
-  const endLat = Math.ceil(bounds.north / gridSizeLat) * gridSizeLat;
-  const startLng = Math.floor(bounds.west / gridSizeLng) * gridSizeLng;
-  const endLng = Math.ceil(bounds.east / gridSizeLng) * gridSizeLng;
-
-  // Generate horizontal lines at fixed intervals
-  for (let lat = startLat; lat <= endLat; lat += gridSizeLat) {
-    features.push({
-      type: "Feature",
-      properties: {
-        ...lineStyle,
-        name: `${gridSize}m grid line at ${lat.toFixed(6)}°N`,
-      },
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [startLng, lat],
-          [endLng, lat],
-        ],
-      },
-    });
-  }
-
-  // Generate vertical lines at fixed intervals
-  for (let lng = startLng; lng <= endLng; lng += gridSizeLng) {
-    features.push({
-      type: "Feature",
-      properties: {
-        ...lineStyle,
-        name: `${gridSize}m grid line at ${lng.toFixed(6)}°E`,
-      },
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [lng, startLat],
-          [lng, endLat],
-        ],
-      },
-    });
-  }
-
-  return features;
+      dashArray:
+        gridType === "50m"
+          ? "10, 10"
+          : gridType === "100m"
+          ? "15, 10"
+          : undefined,
+    },
+    geometry: row.geometry,
+  }));
 }
 
-app.get("/api/grid", (req, res) => {
+app.get("/api/grid", async (req, res) => {
   const bounds = {
     north: parseFloat(req.query.north) || 60.1819,
     south: parseFloat(req.query.south) || 60.1619,
@@ -120,12 +85,19 @@ app.get("/api/grid", (req, res) => {
 
   const zoomLevel = parseFloat(req.query.zoom) || 1000;
 
-  const geojson = {
-    type: "FeatureCollection",
-    features: generateGridLines(bounds, zoomLevel),
-  };
-
-  res.json(geojson);
+  try {
+    const features = await getGridLines(bounds, zoomLevel);
+    res.json({
+      type: "FeatureCollection",
+      features,
+    });
+  } catch (error) {
+    console.error("Error fetching grid lines:", error);
+    res.status(500).json({
+      type: "FeatureCollection",
+      features: [],
+    });
+  }
 });
 
 // Calculate distance between two points in meters

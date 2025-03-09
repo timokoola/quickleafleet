@@ -158,10 +158,11 @@ http://localhost:3000
    - Fetches updated information from info API
    - Updates information overlay
 3. The backend:
-   - Determines grid size based on zoom level
-   - Generates grid lines aligned to absolute coordinates
+   - Queries PostGIS database for grid lines
+   - Filters lines by viewport bounds using spatial index
+   - Selects appropriate grid size based on zoom level
    - Calculates viewport dimensions using haversine formula
-   - Returns GeoJSON with styling information
+   - Returns GeoJSON with pre-generated lines and styling
 4. The frontend:
    - Clears previous grid
    - Renders new grid with appropriate styling
