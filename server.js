@@ -34,52 +34,79 @@ function snapToGrid(coord, gridSize) {
 }
 
 // Generate grid lines for the given bounds
-function generateGridLines(bounds) {
+function generateGridLines(bounds, zoomLevel) {
   const features = [];
-  const gridSize = 100; // meters
+
+  // Determine grid size and style based on zoom level
+  let gridSize, lineStyle;
+  if (zoomLevel < 250) {
+    gridSize = 50; // 50x50 meters
+    lineStyle = {
+      color: "red",
+      dashArray: "10, 10",
+      weight: 2,
+      opacity: 0.7,
+    };
+  } else if (zoomLevel < 1500) {
+    gridSize = 100; // 100x100 meters
+    lineStyle = {
+      color: "blue",
+      dashArray: "15, 10",
+      weight: 2,
+      opacity: 0.7,
+    };
+  } else {
+    gridSize = 500; // 500x500 meters
+    lineStyle = {
+      color: "yellow",
+      dashArray: "20, 20",
+      weight: 3,
+      opacity: 0.8,
+    };
+  }
 
   // Convert grid size to degrees at the center latitude
   const centerLat = (bounds.north + bounds.south) / 2;
   const gridSizeLat = metersToDegreesLat(gridSize);
   const gridSizeLng = metersToDegreesLng(gridSize, centerLat);
 
-  // Find grid starting points (snap to grid)
-  const startLat = snapToGrid(bounds.south / gridSizeLat, 1) * gridSizeLat;
-  const startLng = snapToGrid(bounds.west / gridSizeLng, 1) * gridSizeLng;
-  const endLat = bounds.north;
-  const endLng = bounds.east;
+  // Calculate grid starting points based on fixed origin (0,0)
+  const startLat = Math.floor(bounds.south / gridSizeLat) * gridSizeLat;
+  const endLat = Math.ceil(bounds.north / gridSizeLat) * gridSizeLat;
+  const startLng = Math.floor(bounds.west / gridSizeLng) * gridSizeLng;
+  const endLng = Math.ceil(bounds.east / gridSizeLng) * gridSizeLng;
 
-  // Generate horizontal lines
+  // Generate horizontal lines at fixed intervals
   for (let lat = startLat; lat <= endLat; lat += gridSizeLat) {
     features.push({
       type: "Feature",
       properties: {
-        color: generateColor(lat, startLng),
-        name: `Latitude ${lat.toFixed(6)}`,
+        ...lineStyle,
+        name: `${gridSize}m grid line at ${lat.toFixed(6)}°N`,
       },
       geometry: {
         type: "LineString",
         coordinates: [
-          [bounds.west, lat],
-          [bounds.east, lat],
+          [startLng, lat],
+          [endLng, lat],
         ],
       },
     });
   }
 
-  // Generate vertical lines
+  // Generate vertical lines at fixed intervals
   for (let lng = startLng; lng <= endLng; lng += gridSizeLng) {
     features.push({
       type: "Feature",
       properties: {
-        color: generateColor(startLat, lng),
-        name: `Longitude ${lng.toFixed(6)}`,
+        ...lineStyle,
+        name: `${gridSize}m grid line at ${lng.toFixed(6)}°E`,
       },
       geometry: {
         type: "LineString",
         coordinates: [
-          [lng, bounds.south],
-          [lng, bounds.north],
+          [lng, startLat],
+          [lng, endLat],
         ],
       },
     });
@@ -89,7 +116,6 @@ function generateGridLines(bounds) {
 }
 
 app.get("/api/grid", (req, res) => {
-  // Get bounds from query parameters or use default bounds around Helsinki Station
   const bounds = {
     north: parseFloat(req.query.north) || 60.1819,
     south: parseFloat(req.query.south) || 60.1619,
@@ -97,9 +123,11 @@ app.get("/api/grid", (req, res) => {
     west: parseFloat(req.query.west) || 24.9314,
   };
 
+  const zoomLevel = parseFloat(req.query.zoom) || 1000;
+
   const geojson = {
     type: "FeatureCollection",
-    features: generateGridLines(bounds),
+    features: generateGridLines(bounds, zoomLevel),
   };
 
   res.json(geojson);
