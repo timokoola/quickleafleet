@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { setupDatabase } from "./db/generate-grid.js";
 import pg from "pg";
+import { setTimeout } from "timers/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,6 +22,47 @@ const pool = new pg.Pool({
   connectionString:
     process.env.POSTGRES_URL || "postgres://postgres:postgres@db:5432/gis",
 });
+
+// Add request tracking
+const requestTracker = {
+  activeRequests: 0,
+  lastRequestTime: 0,
+  baseDelay: 100, // Base delay in ms
+  maxDelay: 50000, // Maximum delay in ms
+  windowSize: 2000, // Time window in ms to consider requests "concurrent"
+
+  async trackRequest() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    // Update state
+    this.activeRequests++;
+    this.lastRequestTime = now;
+
+    // Calculate delay based on concurrent requests
+    let delay = 0;
+    if (timeSinceLastRequest < this.windowSize) {
+      // Exponential backoff: baseDelay * 2^(activeRequests-1)
+      delay = Math.min(
+        this.baseDelay * Math.pow(2, this.activeRequests - 1),
+        this.maxDelay
+      );
+    }
+
+    // Apply delay if needed
+    if (delay > 0) {
+      await setTimeout(delay);
+    }
+  },
+
+  completeRequest() {
+    this.activeRequests = Math.max(0, this.activeRequests - 1);
+    // Reset if no active requests
+    if (this.activeRequests === 0) {
+      this.lastRequestTime = 0;
+    }
+  },
+};
 
 // Get grid lines from database
 async function getGridLines(bounds, zoomLevel) {
@@ -86,12 +128,22 @@ app.get("/api/grid", async (req, res) => {
   const zoomLevel = parseFloat(req.query.zoom) || 1000;
 
   try {
+    // Track request and apply delay if needed
+    await requestTracker.trackRequest();
+
     const features = await getGridLines(bounds, zoomLevel);
+
+    // Complete request tracking
+    requestTracker.completeRequest();
+
     res.json({
       type: "FeatureCollection",
       features,
     });
   } catch (error) {
+    // Ensure request is marked complete even on error
+    requestTracker.completeRequest();
+
     console.error("Error fetching grid lines:", error);
     res.status(500).json({
       type: "FeatureCollection",

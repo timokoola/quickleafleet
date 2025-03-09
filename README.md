@@ -9,6 +9,12 @@ An interactive web application that displays a dynamic geographic grid system ce
   * Zoom > 13: 100m grid (blue/white dashed)
   * Zoom ≤ 13: 500m grid (yellow solid)
   * No grid shown for zoom ≤ 10
+- Request throttling simulation:
+  * Tracks concurrent grid requests
+  * Adds exponential backoff delays
+  * Simulates database load
+  * Resets after request window clears
+  * Configurable delay parameters
 - Interactive map centered on Helsinki Railway Station
 - Real-time information overlay showing:
   * Current zoom level
