@@ -20,18 +20,8 @@ const metersToDegreesLng = (meters, lat) =>
   meters / (111111 * Math.cos((lat * Math.PI) / 180));
 
 // Generate a color based on coordinates
-function generateColor(lat, lng) {
-  // Use modular arithmetic to create repeating patterns
-  const hue = (((lat * 100 + lng * 100) % 360) + 360) % 360;
-  const saturation = 70;
-  const lightness = 50;
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-}
 
 // Find the nearest grid line start point
-function snapToGrid(coord, gridSize) {
-  return Math.floor(coord / gridSize) * gridSize;
-}
 
 // Generate grid lines for the given bounds
 function generateGridLines(bounds, zoomLevel) {
