@@ -22,16 +22,50 @@ An interactive web application that displays a geographic grid system centered o
 - Backend:
   - Node.js
   - Express.js
+  - Static file serving
   - CORS support for cross-origin requests
+
+## Project Structure
+
+```
+project-root/
+├── public/           # Frontend static files
+│   ├── index.html   # Main HTML file
+│   ├── style.css    # Styles for the map
+│   └── script.js    # Frontend JavaScript
+├── server.js        # Backend API server
+└── package.json     # Project configuration
+```
 
 ## Installation
 
 1. Clone the repository:
-```
+```bash
 git clone https://github.com/yourusername/geographic-grid-visualization.git
 cd geographic-grid-visualization
 ```
 
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the server:
+
+For production:
+```bash
+npm start
+```
+
+For development with auto-reload:
+```bash
+npm run dev
+```
+
+4. Open your browser and navigate to:
+```
+http://localhost:3000
+```
 
 ## How It Works
 
@@ -47,3 +81,14 @@ cd geographic-grid-visualization
 ### GET /api/grid
 
 Returns a GeoJSON FeatureCollection containing grid lines for the specified bounds.
+
+Query Parameters:
+- `north`: Northern boundary latitude
+- `south`: Southern boundary latitude
+- `east`: Eastern boundary longitude
+- `west`: Western boundary longitude
+
+Example:
+```
+GET /api/grid?north=60.1819&south=60.1619&east=24.9514&west=24.9314
+```

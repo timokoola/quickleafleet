@@ -1,10 +1,18 @@
 import express from "express";
 import cors from "cors";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const port = 3000;
 
 app.use(cors());
+
+// Serve static files from the public directory
+app.use(express.static(join(__dirname, "public")));
 
 // Convert meters to degrees (approximate)
 const metersToDegreesLat = (meters) => meters / 111111;
