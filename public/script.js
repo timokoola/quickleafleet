@@ -34,6 +34,9 @@ let gridLayerGroup = L.layerGroup().addTo(map);
 // Store the cache visualization layer group
 let cacheLayerGroup = L.layerGroup();
 
+// Ensure only grid layer is showing initially
+map.removeLayer(cacheLayerGroup);
+
 // Track current view mode
 let isShowingCache = false;
 
@@ -457,9 +460,13 @@ function updateView() {
   cacheLayerGroup.clearLayers();
 
   if (isShowingCache) {
+    // Remove grid layer and add cache layer
+    map.removeLayer(gridLayerGroup);
     map.addLayer(cacheLayerGroup);
     updateCacheVisualization();
   } else {
+    // Remove cache layer and add grid layer
+    map.removeLayer(cacheLayerGroup);
     map.addLayer(gridLayerGroup);
     fetchAndDisplayGeoJSON();
   }

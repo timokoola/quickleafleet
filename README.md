@@ -23,6 +23,12 @@ An interactive web application that displays a dynamic geographic grid system ce
   * Content-based deduplication
   * Cache statistics in overlay
   * Visual feedback for cache hits
+  * Interactive cache visualization mode:
+    - Toggle between grid and cache views
+    - Visual tile coverage with blue overlays
+    - Hover effects for cached tiles
+    - Dashed borders for tile boundaries
+    - Real-time cache status updates
 - Interactive map centered on Helsinki Railway Station
 - Real-time information overlay showing:
   * Current zoom level
