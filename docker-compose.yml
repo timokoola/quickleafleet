@@ -25,7 +25,7 @@ services:
       dockerfile: docker/backend/Dockerfile
     volumes:
       - ./server.js:/app/server.js
-      - ./node_modules:/app/node_modules
+      - ./db:/app/db
     ports:
       - "3001:3001"
     environment:
@@ -38,6 +38,17 @@ services:
     networks:
       - backend-net
       - db-net
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        until PGPASSWORD=postgres psql -h db -U postgres -d gis -c 'SELECT 1;'; do
+          echo 'Database is unavailable - sleeping' &&
+          sleep 1;
+        done &&
+        echo 'Database is up - executing schema' &&
+        PGPASSWORD=postgres psql -h db -U postgres -d gis -f /app/db/schema.sql &&
+        nodemon --watch server.js server.js
+      "
 
   memcache:
     image: memcached:1.6-alpine
@@ -57,6 +68,11 @@ services:
       - "5432:5432"
     networks:
       - db-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 networks:
   frontend-net:

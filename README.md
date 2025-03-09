@@ -36,6 +36,18 @@ The application runs in a containerized environment with:
 - Memcached - for future caching implementation
 - PostgreSQL with PostGIS - for future spatial data storage
 
+### Database Setup
+
+The application uses PostgreSQL with PostGIS extension for storing grid lines:
+- Automatically initializes database schema on startup
+- Creates spatial tables for grid lines
+- Generates grid lines for Finland:
+  * 50m red grid lines
+  * 100m blue grid lines
+  * 500m yellow grid lines
+- Each line has unique four-word name
+- Includes spatial indexing for performance
+
 ### Network Configuration
 - Frontend can access backend
 - Backend can access all services

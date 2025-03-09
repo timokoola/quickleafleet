@@ -2,10 +2,18 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Install PostgreSQL client
+RUN apk add --no-cache postgresql-client
 
+# Copy package files first for better caching
+COPY package*.json ./
+
+# Install dependencies with clean slate
+RUN rm -rf node_modules && npm install
+
+# Copy application files
 COPY server.js ./
+COPY db ./db
 
 EXPOSE 3001
 

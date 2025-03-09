@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { setupDatabase } from "./db/generate-grid.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -209,6 +210,19 @@ app.get("/api/info", (req, res) => {
 
   res.json(info);
 });
+
+// Add database check on startup
+async function checkDatabase() {
+  try {
+    await setupDatabase();
+  } catch (error) {
+    console.error("Failed to setup database:", error);
+    process.exit(1);
+  }
+}
+
+// Call before starting server
+await checkDatabase();
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
